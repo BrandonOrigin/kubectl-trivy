@@ -20,8 +20,9 @@ To use this tool, ensure the following are installed and configured:
 
 1. **Kubernetes Config**: A working `kubeconfig` file (typically `~/.kube/config`) with permissions to list pods in the target namespaces.
 2. **Trivy CLI**: The `trivy` command-line utility must be installed and executable on your host system path, as the plugin runs shell executions under the hood.
+   - **Version compatibility**: this release still shells out to the `trivy client` subcommand, which was removed upstream in Trivy `v0.29.0` (June 2022) in favor of `trivy image --server`. Use **Trivy `v0.28.x` or earlier** for both the client and server until this is migrated (tracked in `docs/plan.md`, Task 4; see `docs/spec.md` §2 for the target `trivy image --server` architecture). Trivy `v0.29.0+` is not yet supported.
 3. **jq**: The `jq` utility is required for parsing JSON scan results returned by Trivy.
-4. **Remote Trivy Server**: A running instance of Trivy in server mode (e.g., `trivy server --listen 0.0.0.0:8080`).
+4. **Remote Trivy Server**: A running instance of Trivy in server mode (e.g., `trivy server --listen 0.0.0.0:8080`), running the same `v0.28.x`-or-earlier release as the client.
 
 ---
 
