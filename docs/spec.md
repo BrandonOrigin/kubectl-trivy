@@ -60,6 +60,11 @@ flowchart TD
    - Sorts findings by severity priority: `CRITICAL > HIGH > MEDIUM > LOW > UNKNOWN`.
    - Uses `github.com/jedib0t/go-pretty/v6/table` to render ASCII output tables to `os.Stdout`.
 
+### 2.2 Trivy Version Compatibility
+
+- **Target (this architecture)**: `trivy image --server ... --format json` requires **Trivy `v0.29.0` or newer** (server and client), since `--server` became a flag on `trivy image` rather than a separate `trivy client` subcommand as of that release. Recommended: the latest stable Trivy release for current vulnerability DB coverage and security fixes.
+- **Current implementation caveat**: the code in `cmd/trivy.go` has not yet migrated to this architecture (see `docs/plan.md`, Task 4) and still shells out to the deprecated `trivy client` subcommand, which requires **Trivy `v0.28.x` or earlier**. See the README Prerequisites section for the currently supported version.
+
 ---
 
 ## 3. Data Schemas & Types
