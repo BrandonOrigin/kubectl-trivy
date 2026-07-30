@@ -7,6 +7,7 @@
 ## Features
 
 - **Kubernetes Integration**: Uses the official `client-go` library to securely connect to your Kubernetes cluster and discover all containers running in a given namespace.
+- **Complete Container Discovery**: Scans main application containers, **init containers**, and **ephemeral (debug) containers** — an init container pulling a vulnerable toolchain image gets the same scrutiny as the workload itself.
 - **Remote Vulnerability Scan**: Connects to a remote Trivy server to check for vulnerabilities across all discovered images.
 - **No Shell Dependencies**: Invokes the `trivy` binary directly and parses its JSON natively — no `bash` or `jq` required.
 - **Sorted & Aggregated Results**: Summarizes vulnerability counts (Critical, High, Medium, Low, Unknown) and sorts the scanned images in descending order of severity.

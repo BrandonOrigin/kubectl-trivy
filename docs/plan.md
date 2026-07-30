@@ -2,6 +2,12 @@
 
 This document details the step-by-step plan for updating `kubectl-trivy` to support modern Go language standards (Go 1.23+), current Trivy versions, complete Kubernetes pod container discovery (main, init, and ephemeral containers), and native Go JSON parsing (removing `bash` and `jq` shell dependencies).
 
+> **Status**: all seven tasks below have landed. The Go directive ended up at 1.26 rather than the
+> 1.23 written into Task 1, and Trivy at v0.72.0 — see the
+> [README compatibility table](../README.md#version-compatibility) for the versions actually in use.
+> What remains is verification, not implementation: the checks that need a live cluster are tracked
+> in [#8](https://github.com/BrandonOrigin/kubectl-trivy/issues/8).
+
 ---
 
 ## Tasks
