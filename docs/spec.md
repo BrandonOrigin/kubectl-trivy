@@ -62,8 +62,21 @@ flowchart TD
 
 ### 2.2 Trivy Version Compatibility
 
-- **Target (this architecture)**: `trivy image --server ... --format json` requires **Trivy `v0.29.0` or newer** (server and client), since `--server` became a flag on `trivy image` rather than a separate `trivy client` subcommand as of that release. Recommended: the latest stable Trivy release for current vulnerability DB coverage and security fixes.
-- **Current implementation caveat**: the code in `cmd/trivy.go` has not yet migrated to this architecture (see `docs/plan.md`, Task 4) and still shells out to the deprecated `trivy client` subcommand, which requires **Trivy `v0.28.x` or earlier**. See the README Prerequisites section for the currently supported version.
+- **Minimum supported version**: **Trivy `v0.29.0`**. That release moved remote scanning from the
+  standalone `trivy client` subcommand to `--server` as a flag on `trivy image`, which is the
+  invocation this architecture specifies (§2.1, item 3). Anything older cannot serve
+  `trivy image --server` and is out of scope.
+- **Recommended version**: the latest stable Trivy release (`v0.72.0` at the time of writing) for
+  current vulnerability DB coverage and security fixes. The `trivy image --server --format json`
+  contract and the JSON fields consumed in §3.2 (`Results[].Vulnerabilities[].Severity`) are stable
+  across `v0.29.0`+, so no upper bound is pinned.
+- **Client/server pairing**: run the same Trivy release on both sides. Trivy does not guarantee
+  RPC compatibility across mismatched client and server versions.
+- **Migration status**: `cmd/trivy.go` has not yet been migrated to this invocation (see
+  `docs/plan.md`, Task 4) and still shells out to `trivy client`, which upstream removed in
+  `v0.29.0`. Until Task 4 lands, the built binary cannot talk to a Trivy version this spec
+  supports; the README Prerequisites section documents that legacy constraint for the current
+  build, and flips to `v0.29.0`+ with Task 4.
 
 ---
 
