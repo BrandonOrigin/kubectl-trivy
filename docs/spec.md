@@ -73,11 +73,11 @@ flowchart TD
   (`Results[].Vulnerabilities[].Severity`) are stable across `v0.29.0`+.
 - **Client/server pairing**: run the same Trivy release on both sides. Trivy does not guarantee
   RPC compatibility across mismatched client and server versions.
-- **Migration status**: `cmd/trivy.go` has not yet been migrated to this invocation (see
-  `docs/plan.md`, Task 4) and still shells out to `trivy client`, which upstream removed in
-  `v0.29.0`. Until Task 4 lands, the built binary cannot talk to a Trivy version this spec
-  supports; the README Prerequisites section documents that legacy constraint for the current
-  build, and flips to `v0.29.0`+ with Task 4.
+- **Migration status**: implemented. `cmd/trivy.go` invokes `trivy image --server` and parses the
+  JSON natively (`docs/plan.md`, Task 4); the deprecated `trivy client` path and its `bash`/`jq`
+  pipeline are gone. Verified end to end against a Trivy `v0.72.0` server: the parser's severity
+  tallies for `nginx:1.19.1` matched an independent `jq` count of the same report
+  (44 CRITICAL / 201 HIGH / 198 MEDIUM / 55 LOW / 9 UNKNOWN).
 
 ---
 

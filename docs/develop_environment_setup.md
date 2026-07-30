@@ -10,7 +10,7 @@ To develop and test `kubectl-trivy`, your Ubuntu server will need:
 - **Go** (v1.26 or newer — matches the `go` directive in `go.mod`)
 - **kubectl** (Kubernetes CLI)
 - **Kind** (Kubernetes in Docker) or **Minikube** for local cluster testing
-- **Trivy CLI** (running in server mode) — **v0.28.x or earlier**, see Step 4.1
+- **Trivy CLI** (running in server mode) — **v0.29.0+**, reference version v0.72.0; see Step 4.1
 - **Git** & basic build tools
 
 ---
@@ -117,21 +117,29 @@ kubectl get nodes
 
 ### 4.1 Install Trivy CLI
 
-> **Version constraint**: the current implementation still shells out to the `trivy client`
-> subcommand, which upstream removed in Trivy `v0.29.0`. Install **`v0.28.x` or earlier** for
-> both client and server until the migration to `trivy image --server` (Task 4) lands — see
-> `docs/spec.md` §2.2. The apt repository below serves the *latest* release, so pin explicitly.
+> **Version requirement**: Trivy **`v0.29.0` or newer** (that release introduced
+> `trivy image --server`). The reference version is **`v0.72.0`** — see `docs/spec.md` §2.2.
+> Run the same release for both client and server.
 
 ```bash
-# Install a pinned v0.28.x release from the GitHub release tarball
-TRIVY_VERSION=0.28.1
+sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+sudo apt-get update
+sudo apt-get install -y trivy
+
+# Verify Trivy installation
+trivy --version
+```
+
+To pin an exact release instead of tracking apt's latest:
+
+```bash
+TRIVY_VERSION=0.72.0
 wget "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
 tar -xzf "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" trivy
 sudo install -o root -g root -m 0755 trivy /usr/local/bin/trivy
 rm trivy "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
-
-# Verify Trivy installation (expect v0.28.x)
-trivy --version
 ```
 
 ### 4.2 Run Trivy in Server Mode

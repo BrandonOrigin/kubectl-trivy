@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,127 +11,193 @@ import (
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-type vulResult struct {
-	image   string
-	pods    string
-	high    int
-	med     int
-	low     int
-	unknow  int
-	support bool
+// TrivyReport mirrors the subset of `trivy image --format json` output we consume.
+type TrivyReport struct {
+	Results []TrivyResult `json:"Results"`
 }
 
-func getImages(namespace string) map[string]string {
+type TrivyResult struct {
+	Target          string          `json:"Target"`
+	Class           string          `json:"Class"`
+	Vulnerabilities []Vulnerability `json:"Vulnerabilities"`
+}
 
+type Vulnerability struct {
+	VulnerabilityID  string `json:"VulnerabilityID"`
+	PkgName          string `json:"PkgName"`
+	InstalledVersion string `json:"InstalledVersion"`
+	Severity         string `json:"Severity"`
+}
+
+type vulResult struct {
+	image     string
+	pods      string
+	critical  int
+	high      int
+	med       int
+	low       int
+	unknown   int
+	supported bool
+}
+
+// severities are the Trivy severity levels reported, in descending order of importance.
+var severities = []string{"CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"}
+
+func getImages(ctx context.Context, namespace string) (map[string]string, error) {
 	// use the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
-		panic(err.Error())
+		return nil, fmt.Errorf("loading kubeconfig %q: %w", kubeconfig, err)
 	}
 
 	// create the clientset
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		panic(err.Error())
+		return nil, fmt.Errorf("creating Kubernetes client: %w", err)
 	}
 
 	// Get pods in the namespace
-	pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
-	images := map[string]string{}
-	if errors.IsNotFound(err) {
+	pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
+	if apierrors.IsNotFound(err) {
 		fmt.Printf("namespace %s not found\n", namespace)
+		return map[string]string{}, nil
 	} else if err != nil {
-		panic(err.Error())
-	} else {
-		fmt.Printf("Found %d podin namespace %s\n", len(pods.Items), namespace)
-		if len(pods.Items) > 0 {
-			for _, pod := range pods.Items {
-				for _, container := range pod.Spec.Containers {
-					images[container.Image] = pod.Name + "," + images[container.Image]
-				}
-			}
+		return nil, fmt.Errorf("listing pods in namespace %s: %w", namespace, err)
+	}
+
+	images := map[string]string{}
+	fmt.Printf("Found %d pods in namespace %s\n", len(pods.Items), namespace)
+	for _, pod := range pods.Items {
+		for _, container := range pod.Spec.Containers {
+			images[container.Image] = pod.Name + "," + images[container.Image]
 		}
 	}
-	return images
+	return images, nil
 }
 
-func showScanResult(images map[string]string) {
+// trivyServerURL normalizes the --server value into a URL Trivy accepts, so that
+// both a bare `host:port` and a fully qualified `http(s)://host:port` work.
+func trivyServerURL(server string) string {
+	server = strings.TrimSpace(server)
+	server = strings.TrimSuffix(server, "/")
+	if strings.HasPrefix(server, "http://") || strings.HasPrefix(server, "https://") {
+		return server
+	}
+	return "http://" + server
+}
 
-	// for each image, scan it via trivy fmt.Println(trivy)
+// scanImage runs a client/server Trivy scan for one image and returns the
+// vulnerability count per severity level.
+func scanImage(ctx context.Context, serverURL, image string) (map[string]int, error) {
+	cmd := exec.CommandContext(ctx, "trivy", "image", "--server", serverURL, "--format", "json", image)
+	out, err := cmd.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return nil, fmt.Errorf("running trivy: %w: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return nil, fmt.Errorf("running trivy: %w", err)
+	}
 
-	imgVulResults := []vulResult{}
+	var report TrivyReport
+	if err := json.Unmarshal(out, &report); err != nil {
+		return nil, fmt.Errorf("parsing trivy JSON output: %w", err)
+	}
+	return countSeverities(report), nil
+}
+
+// countSeverities tallies vulnerabilities per severity level across all results.
+func countSeverities(report TrivyReport) map[string]int {
+	counts := map[string]int{}
+	for _, severity := range severities {
+		counts[severity] = 0
+	}
+	for _, result := range report.Results {
+		for _, vul := range result.Vulnerabilities {
+			severity := strings.ToUpper(strings.TrimSpace(vul.Severity))
+			if _, known := counts[severity]; !known {
+				severity = "UNKNOWN"
+			}
+			counts[severity]++
+		}
+	}
+	return counts
+}
+
+// sortVulResults orders images by descending severity, most severe first. Images
+// that could not be scanned carry -1 counts and therefore sort last.
+func sortVulResults(results []vulResult) {
+	sort.Slice(results, func(i, j int) bool {
+		a, b := results[i], results[j]
+		if a.critical != b.critical {
+			return a.critical > b.critical
+		}
+		if a.high != b.high {
+			return a.high > b.high
+		}
+		if a.med != b.med {
+			return a.med > b.med
+		}
+		if a.low != b.low {
+			return a.low > b.low
+		}
+		if a.unknown != b.unknown {
+			return a.unknown > b.unknown
+		}
+		return a.image < b.image
+	})
+}
+
+func showScanResult(ctx context.Context, images map[string]string) error {
+	serverURL := trivyServerURL(trivyServer)
+
+	imgVulResults := make([]vulResult, 0, len(images))
 	for img, pods := range images {
-
-		// cmd := "trivy client --remote http://" + trivy["server"] + ":" + trivy["port"] + " " + img + " | grep 'Total'"
-		// out, err := exec.Command("bash", "-c", cmd).Output()
-		cmd1 := "trivy client --format json --remote http://" + trivyServer + " " + img
-		parseResultCmd := cmd1 + " | jq -r \".Results[]\""
-		_, err1 := exec.Command("bash", "-c", parseResultCmd).Output()
-
-		if err1 != nil {
-			fmt.Println("Failed to execute command:", cmd1)
-			//t.AppendRow([]interface{}{img, -1, -1, -1, -1, "Unsupported"})
-			imgVulResults = append(imgVulResults, vulResult{img, pods, -1, -1, -1, -1, false})
+		counts, err := scanImage(ctx, serverURL, img)
+		if err != nil {
+			// A cancelled context means the user interrupted us, not a bad image.
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
+			fmt.Fprintf(os.Stderr, "Failed to scan %s: %v\n", img, err)
+			imgVulResults = append(imgVulResults, vulResult{
+				image: img, pods: pods,
+				critical: -1, high: -1, med: -1, low: -1, unknown: -1,
+				supported: false,
+			})
 			continue
 		}
 
-		cmd2 := cmd1 + " | jq -r \".Results[].Vulnerabilities[].Severity\""
-		out2, err2 := exec.Command("bash", "-c", cmd2).Output()
-		if err2 != nil {
-			fmt.Println("No Vulnerabilities:", img)
-			//t.AppendRow([]interface{}{img, 0, 0, 0, 0})
-			imgVulResults = append(imgVulResults, vulResult{img, pods, 0, 0, 0, 0, true})
-		} else {
-			splitFn := func(c rune) bool {
-				return c == '\n'
-			}
-			severity := strings.FieldsFunc(string(out2), splitFn)
-			//fmt.Println(img, ":", severity)
-			vulCount := countOccurence(severity)
-			//t.AppendRow([]interface{}{img, vulCount["HIGH"], vulCount["MEDIUM"], vulCount["LOW"], vulCount["UNKNOWN"]})
-			imgVulResults = append(imgVulResults, vulResult{img, pods, vulCount["HIGH"], vulCount["MEDIUM"], vulCount["LOW"], vulCount["UNKNOWN"], true})
-		}
-
-		// t.AppendSeparator()
+		imgVulResults = append(imgVulResults, vulResult{
+			image: img, pods: pods,
+			critical:  counts["CRITICAL"],
+			high:      counts["HIGH"],
+			med:       counts["MEDIUM"],
+			low:       counts["LOW"],
+			unknown:   counts["UNKNOWN"],
+			supported: true,
+		})
 	}
 
-	sort.Slice(imgVulResults, func(i, j int) bool {
-		if imgVulResults[i].high != imgVulResults[j].high {
-			return imgVulResults[i].high > imgVulResults[j].high
-		} else if imgVulResults[i].med != imgVulResults[j].med {
-			return imgVulResults[i].med > imgVulResults[j].med
-		} else if imgVulResults[i].low != imgVulResults[j].low {
-			return imgVulResults[i].low > imgVulResults[j].low
-		}
-		return imgVulResults[i].unknow > imgVulResults[j].unknow
-
-	})
+	sortVulResults(imgVulResults)
 
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"Image", "Pods", "High", "Medium", "Low", "Unknow"})
+	t.AppendHeader(table.Row{"Image", "Pods", "Critical", "High", "Medium", "Low", "Unknown"})
 	for _, r := range imgVulResults {
-		// fmt.Println(value.image, value.h, value.m, value.l)
-		if r.support {
-			t.AppendRow([]interface{}{r.image, r.pods, r.high, r.med, r.low, r.unknow})
-		} else {
-			t.AppendRow([]interface{}{r.image, r.pods, r.high, r.med, r.low, r.unknow, "Unsupported"})
+		unknown := fmt.Sprintf("%d", r.unknown)
+		if !r.supported {
+			unknown += " (Unsupported)"
 		}
+		t.AppendRow(table.Row{r.image, r.pods, r.critical, r.high, r.med, r.low, unknown})
 	}
 	t.Render()
 
-}
-
-func countOccurence(apps []string) map[string]int {
-	dict := make(map[string]int)
-	for _, v := range apps {
-		dict[v]++
-	}
-	return dict
+	return nil
 }

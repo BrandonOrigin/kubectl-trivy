@@ -1,13 +1,15 @@
 /*
 Copyright © 2022 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/util/homedir"
@@ -23,24 +25,33 @@ var rootCmd = &cobra.Command{
 	Long:  "Scan pods' image via Trivy in the namespace",
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
-	Run: func(cmd *cobra.Command, args []string) {
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
 		ns, err := cmd.Flags().GetString("namespace")
 		if err != nil {
-			fmt.Println("Can not read namespace flag")
-			os.Exit(1)
+			return fmt.Errorf("reading namespace flag: %w", err)
 		}
-		images := getImages(ns)
+
+		ctx := cmd.Context()
+		images, err := getImages(ctx, ns)
+		if err != nil {
+			return err
+		}
 
 		fmt.Println("Remote Trivy Server: ", trivyServer)
-		showScanResult(images)
+		return showScanResult(ctx, images)
 	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
+	// Cancel the command context on SIGINT/SIGTERM so in-flight `trivy` processes
+	// are torn down instead of being left behind.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		os.Exit(1)
 	}
 }
