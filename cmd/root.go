@@ -1,6 +1,3 @@
-/*
-Copyright © 2022 NAME HERE <EMAIL ADDRESS>
-*/
 package cmd
 
 import (
@@ -22,9 +19,8 @@ var trivyServer string
 var rootCmd = &cobra.Command{
 	Use:   "kubectl-trivy",
 	Short: "Scan pods' image via Trivy in the namespace",
-	Long:  "Scan pods' image via Trivy in the namespace",
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
+	Long: "Scan every container image running in a Kubernetes namespace against a remote Trivy\n" +
+		"server, and report vulnerability counts per image sorted by severity.",
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ns, err := cmd.Flags().GetString("namespace")
@@ -56,29 +52,33 @@ func Execute() {
 	}
 }
 
+// defaultKubeconfig resolves the kubeconfig path used when --kubeconfig is not
+// given: KUBE_CONFIG wins if set, otherwise ~/.kube/config.
+func defaultKubeconfig(env, home string) string {
+	if env != "" {
+		return env
+	}
+	if home != "" {
+		return filepath.Join(home, ".kube", "config")
+	}
+	return ""
+}
+
+// defaultServer resolves the Trivy server address used when --server is not
+// given: TRIVY_SERVER if set, otherwise localhost.
+func defaultServer(env string) string {
+	if env != "" {
+		return env
+	}
+	return "127.0.0.1:8080"
+}
+
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.kubectl-trivy.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-
-	defaultKubeConfig := ""
-	if home := homedir.HomeDir(); home != "" {
-		defaultKubeConfig = filepath.Join(home, ".kube", "config")
-	} else if os.Getenv("KUBE_CONFIG") != "" {
-		defaultKubeConfig = os.Getenv("KUBE_CONFIG")
-	}
-	rootCmd.Flags().StringVar(&kubeconfig, "kubeconfig", defaultKubeConfig, "Absolute path to the kubeconfig file")
-	rootCmd.Flags().StringP("namespace", "n", "default", "namespace")
-
-	defaultTrivyServer := "127.0.0.1:8080"
-	if os.Getenv("TRIVY_SERVER") != "" {
-		defaultTrivyServer = os.Getenv("TRIVY_SERVER")
-	}
-
-	rootCmd.Flags().StringVarP(&trivyServer, "server", "s", defaultTrivyServer, "Remote Trivy Address. (default 127.0.0.1:8080) ")
+	rootCmd.Flags().StringVar(&kubeconfig, "kubeconfig",
+		defaultKubeconfig(os.Getenv("KUBE_CONFIG"), homedir.HomeDir()),
+		"Absolute path to the kubeconfig file (overrides $KUBE_CONFIG)")
+	rootCmd.Flags().StringP("namespace", "n", "default", "Kubernetes namespace to scan")
+	rootCmd.Flags().StringVarP(&trivyServer, "server", "s",
+		defaultServer(os.Getenv("TRIVY_SERVER")),
+		"Remote Trivy server address (overrides $TRIVY_SERVER)")
 }

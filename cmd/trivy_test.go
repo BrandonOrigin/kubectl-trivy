@@ -254,3 +254,36 @@ func TestImagesFromPodsIgnoresEmptyImageAndNoPods(t *testing.T) {
 		t.Errorf("imagesFromPods with empty images = %v, want empty", got)
 	}
 }
+
+func TestDefaultKubeconfig(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		home string
+		want string
+	}{
+		// Regression: KUBE_CONFIG used to be consulted only when homedir was
+		// empty, so it was silently ignored on any normal machine.
+		{"env wins over home", "/custom/kubeconfig", "/home/user", "/custom/kubeconfig"},
+		{"home used when env unset", "", "/home/user", "/home/user/.kube/config"},
+		{"env used when home empty", "/custom/kubeconfig", "", "/custom/kubeconfig"},
+		{"empty when neither set", "", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := defaultKubeconfig(tt.env, tt.home); got != tt.want {
+				t.Errorf("defaultKubeconfig(%q, %q) = %q, want %q", tt.env, tt.home, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDefaultServer(t *testing.T) {
+	if got := defaultServer("trivy.internal:8080"); got != "trivy.internal:8080" {
+		t.Errorf("defaultServer with env = %q, want %q", got, "trivy.internal:8080")
+	}
+	if got := defaultServer(""); got != "127.0.0.1:8080" {
+		t.Errorf("defaultServer without env = %q, want %q", got, "127.0.0.1:8080")
+	}
+}
