@@ -66,10 +66,11 @@ flowchart TD
   standalone `trivy client` subcommand to `--server` as a flag on `trivy image`, which is the
   invocation this architecture specifies (§2.1, item 3). Anything older cannot serve
   `trivy image --server` and is out of scope.
-- **Recommended version**: the latest stable Trivy release (`v0.72.0` at the time of writing) for
-  current vulnerability DB coverage and security fixes. The `trivy image --server --format json`
-  contract and the JSON fields consumed in §3.2 (`Results[].Vulnerabilities[].Severity`) are stable
-  across `v0.29.0`+, so no upper bound is pinned.
+- **Reference version**: **Trivy `v0.72.0`** — the current latest stable release, and the version
+  this spec is written against. Use it for both client and server unless a newer stable release is
+  available, for current vulnerability DB coverage and security fixes. No upper bound is pinned: the
+  `trivy image --server --format json` contract and the JSON fields consumed in §3.2
+  (`Results[].Vulnerabilities[].Severity`) are stable across `v0.29.0`+.
 - **Client/server pairing**: run the same Trivy release on both sides. Trivy does not guarantee
   RPC compatibility across mismatched client and server versions.
 - **Migration status**: `cmd/trivy.go` has not yet been migrated to this invocation (see
