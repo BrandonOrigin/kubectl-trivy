@@ -62,8 +62,22 @@ flowchart TD
 
 ### 2.2 Trivy Version Compatibility
 
-- **Target (this architecture)**: `trivy image --server ... --format json` requires **Trivy `v0.29.0` or newer** (server and client), since `--server` became a flag on `trivy image` rather than a separate `trivy client` subcommand as of that release. Recommended: the latest stable Trivy release for current vulnerability DB coverage and security fixes.
-- **Current implementation caveat**: the code in `cmd/trivy.go` has not yet migrated to this architecture (see `docs/plan.md`, Task 4) and still shells out to the deprecated `trivy client` subcommand, which requires **Trivy `v0.28.x` or earlier**. See the README Prerequisites section for the currently supported version.
+- **Minimum supported version**: **Trivy `v0.29.0`**. That release moved remote scanning from the
+  standalone `trivy client` subcommand to `--server` as a flag on `trivy image`, which is the
+  invocation this architecture specifies (§2.1, item 3). Anything older cannot serve
+  `trivy image --server` and is out of scope.
+- **Reference version**: **Trivy `v0.72.0`** — the current latest stable release, and the version
+  this spec is written against. Use it for both client and server unless a newer stable release is
+  available, for current vulnerability DB coverage and security fixes. No upper bound is pinned: the
+  `trivy image --server --format json` contract and the JSON fields consumed in §3.2
+  (`Results[].Vulnerabilities[].Severity`) are stable across `v0.29.0`+.
+- **Client/server pairing**: run the same Trivy release on both sides. Trivy does not guarantee
+  RPC compatibility across mismatched client and server versions.
+- **Migration status**: implemented. `cmd/trivy.go` invokes `trivy image --server` and parses the
+  JSON natively (`docs/plan.md`, Task 4); the deprecated `trivy client` path and its `bash`/`jq`
+  pipeline are gone. Verified end to end against a Trivy `v0.72.0` server: the parser's severity
+  tallies for `nginx:1.19.1` matched an independent `jq` count of the same report
+  (44 CRITICAL / 201 HIGH / 198 MEDIUM / 55 LOW / 9 UNKNOWN).
 
 ---
 

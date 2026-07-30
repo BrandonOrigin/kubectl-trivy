@@ -10,11 +10,12 @@ This document details the step-by-step plan for updating `kubectl-trivy` to supp
 - **Exact File Paths Touched**:
   - [`go.mod`](file:///Users/brandon/Documents/2026Projects/brandonorigin/kubectl-trivy/go.mod)
 - **Changes**:
-  - Update Go directive from `go 1.18` to `go 1.23`.
-  - Upgrade dependencies:
-    - `github.com/jedib0t/go-pretty` -> `github.com/jedib0t/go-pretty/v6` (`v6.6.5`)
-    - `github.com/spf13/cobra` -> `v1.8.1`
-    - `k8s.io/client-go` & `k8s.io/apimachinery` -> `v0.31.0`
+  - Update Go directive from `go 1.18` to a currently supported release (`go 1.26`).
+  - Upgrade dependencies to current releases:
+    - `github.com/jedib0t/go-pretty` -> `github.com/jedib0t/go-pretty/v6` (`v6.8.3`)
+    - `github.com/spf13/cobra` -> `v1.10.2`
+    - `k8s.io/client-go` & `k8s.io/apimachinery` -> `v0.36.3`
+  - Keep `.github/workflows/release.yml` (`actions/setup-go`) in step with the `go` directive.
 - **Verification**:
   - Run command: `go mod tidy && go build ./...`
 

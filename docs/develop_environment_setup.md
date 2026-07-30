@@ -6,12 +6,19 @@ This guide provides step-by-step instructions to set up a full development envir
 
 ## Prerequisites Summary
 
-To develop and test `kubectl-trivy`, your Ubuntu server will need:
-- **Go** (v1.23 or newer)
-- **kubectl** (Kubernetes CLI)
-- **Kind** (Kubernetes in Docker) or **Minikube** for local cluster testing
-- **Trivy CLI** (running in server mode)
-- **Git** & basic build tools
+Versions below match the compatibility table in the [README](../README.md#version-compatibility),
+which is the single source of truth — update it there first if any of these change.
+
+| Component | Version used in this guide | Step |
+|---|---|---|
+| Go | 1.26.5 (minimum 1.26) | Step 2 |
+| kind | v0.32.0 | Step 3.3 |
+| Kubernetes (test cluster) | 1.36 (minimum 1.35) | Step 3.3 |
+| Trivy CLI + server | v0.72.0 (minimum v0.29.0) | Step 4 |
+| golangci-lint | v2.12.2 | Step 7 |
+
+`kubectl` tracks the cluster and is installed at whatever `stable.txt` currently points to
+(Step 3.2). Git and basic build tools come from Step 1.
 
 ---
 
@@ -32,18 +39,18 @@ sudo apt-get update && sudo apt-get install -y \
 
 ---
 
-## Step 2: Install Go (v1.23+)
+## Step 2: Install Go (v1.26+)
 
 1. Download the latest Go binary tarball:
 
    ```bash
-   # Download Go 1.23.6 (or latest version)
-   wget https://go.dev/dl/go1.23.6.linux-amd64.tar.gz
+   # Download Go 1.26.5 (or latest version)
+   wget https://go.dev/dl/go1.26.5.linux-amd64.tar.gz
 
    # Remove any previous installation and extract
    sudo rm -rf /usr/local/go
-   sudo tar -C /usr/local -xzf go1.23.6.linux-amd64.tar.gz
-   rm go1.23.6.linux-amd64.tar.gz
+   sudo tar -C /usr/local -xzf go1.26.5.linux-amd64.tar.gz
+   rm go1.26.5.linux-amd64.tar.gz
    ```
 
 2. Add Go to your environment path in `~/.bashrc` (or `~/.zshrc`):
@@ -100,22 +107,37 @@ kubectl version --client
 
 ```bash
 # Download kind binary
-[ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.24.0/kind-linux-amd64
+[ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.32.0/kind-linux-amd64
 chmod +x ./kind
 sudo mv ./kind /usr/local/bin/kind
 
 # Create a local Kubernetes cluster
 kind create cluster --name dev-cluster
 
-# Verify cluster connection
+# Verify cluster connection — expect a 1.35.x or newer node
 kubectl get nodes
 ```
+
+> **Cluster version**: `kubectl-trivy` is built against `client-go` v0.36.3, so the cluster should be
+> Kubernetes **1.35–1.37** (see the README compatibility table). `kind create cluster` uses whichever
+> node image its release ships by default; if that falls outside the supported range, pin it
+> explicitly with the matching tag from the [kind v0.32.0 release
+> notes](https://github.com/kubernetes-sigs/kind/releases/tag/v0.32.0), for example:
+>
+> ```bash
+> kind create cluster --name dev-cluster --image kindest/node:v1.36.0
+> ```
 
 ---
 
 ## Step 4: Install Trivy & Start Trivy Server
 
 ### 4.1 Install Trivy CLI
+
+> **Version requirement**: Trivy **`v0.29.0` or newer** (that release introduced
+> `trivy image --server`). The reference version is **`v0.72.0`** — see the
+> [README compatibility table](../README.md#version-compatibility) and `docs/spec.md` §2.2.
+> Run the same release for both client and server.
 
 ```bash
 sudo apt-get install -y wget apt-transport-https gnupg lsb-release
@@ -126,6 +148,16 @@ sudo apt-get install -y trivy
 
 # Verify Trivy installation
 trivy --version
+```
+
+To pin an exact release instead of tracking apt's latest:
+
+```bash
+TRIVY_VERSION=0.72.0
+wget "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+tar -xzf "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" trivy
+sudo install -o root -g root -m 0755 trivy /usr/local/bin/trivy
+rm trivy "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
 ```
 
 ### 4.2 Run Trivy in Server Mode
@@ -186,7 +218,7 @@ kubectl get pods -n test-scan
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/brandontsai/kubectl-trivy.git
+   git clone https://github.com/BrandonOrigin/kubectl-trivy.git
    cd kubectl-trivy
    ```
 
@@ -228,6 +260,6 @@ go test -v ./...
 Run linter (optional, install `golangci-lint`):
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.60.3
+curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.12.2
 golangci-lint run
 ```
