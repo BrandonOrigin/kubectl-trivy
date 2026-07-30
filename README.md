@@ -46,24 +46,50 @@ To use this tool, ensure the following are installed and configured:
 
 ## Installation
 
-### 1. Compile the Binary
-Clone the repository and compile the source code using **Go 1.26 or newer** (see the version table
-above):
+`kubectl` discovers plugins by looking for executables named `kubectl-<name>` on your `$PATH`.
+Either installation method below satisfies that, since both produce a binary called
+`kubectl-trivy`.
+
+### Option A: `go install` (recommended)
+
+Requires **Go 1.26 or newer** (see the version table above):
 
 ```bash
+go install github.com/BrandonOrigin/kubectl-trivy@latest
+```
+
+This drops the binary in `$(go env GOPATH)/bin`, so make sure that directory is on your `$PATH`:
+
+```bash
+export PATH="$PATH:$(go env GOPATH)/bin"
+```
+
+> The project has no tagged releases yet, so `@latest` currently resolves to the tip of the default
+> branch. Once releases are tagged, pin one explicitly with `@v1.2.3`.
+
+### Option B: Build from source
+
+Clone the repository and compile it:
+
+```bash
+git clone https://github.com/BrandonOrigin/kubectl-trivy.git
+cd kubectl-trivy
 go build -o kubectl-trivy
 ```
 
-### 2. Install as a `kubectl` Plugin
-Move the compiled binary into any directory in your system `$PATH` and ensure it has execution permissions. By naming it `kubectl-trivy`, Kubernetes automatically recognizes it as a subcommand.
+Then move the binary into any directory on your `$PATH` and make sure it is executable:
 
 ```bash
-mv kubectl-trivy /usr/local/bin/
-chmod +x /usr/local/bin/kubectl-trivy
+sudo mv kubectl-trivy /usr/local/bin/
+sudo chmod +x /usr/local/bin/kubectl-trivy
 ```
 
-Now you can invoke it directly via `kubectl`:
+### Verify
+
+Either way, `kubectl` should now expose the plugin as a subcommand:
+
 ```bash
+kubectl plugin list   # should list kubectl-trivy
 kubectl trivy --help
 ```
 
