@@ -29,7 +29,8 @@ To use this tool, ensure the following are installed and configured:
 ## Installation
 
 ### 1. Compile the Binary
-Clone the repository and compile the source code using Go:
+Clone the repository and compile the source code using **Go 1.26 or newer** (the version pinned by
+the `go` directive in `go.mod`):
 
 ```bash
 go build -o kubectl-trivy

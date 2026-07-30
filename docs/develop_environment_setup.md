@@ -7,10 +7,10 @@ This guide provides step-by-step instructions to set up a full development envir
 ## Prerequisites Summary
 
 To develop and test `kubectl-trivy`, your Ubuntu server will need:
-- **Go** (v1.23 or newer)
+- **Go** (v1.26 or newer — matches the `go` directive in `go.mod`)
 - **kubectl** (Kubernetes CLI)
 - **Kind** (Kubernetes in Docker) or **Minikube** for local cluster testing
-- **Trivy CLI** (running in server mode)
+- **Trivy CLI** (running in server mode) — **v0.28.x or earlier**, see Step 4.1
 - **Git** & basic build tools
 
 ---
@@ -32,18 +32,18 @@ sudo apt-get update && sudo apt-get install -y \
 
 ---
 
-## Step 2: Install Go (v1.23+)
+## Step 2: Install Go (v1.26+)
 
 1. Download the latest Go binary tarball:
 
    ```bash
-   # Download Go 1.23.6 (or latest version)
-   wget https://go.dev/dl/go1.23.6.linux-amd64.tar.gz
+   # Download Go 1.26.5 (or latest version)
+   wget https://go.dev/dl/go1.26.5.linux-amd64.tar.gz
 
    # Remove any previous installation and extract
    sudo rm -rf /usr/local/go
-   sudo tar -C /usr/local -xzf go1.23.6.linux-amd64.tar.gz
-   rm go1.23.6.linux-amd64.tar.gz
+   sudo tar -C /usr/local -xzf go1.26.5.linux-amd64.tar.gz
+   rm go1.26.5.linux-amd64.tar.gz
    ```
 
 2. Add Go to your environment path in `~/.bashrc` (or `~/.zshrc`):
@@ -117,14 +117,20 @@ kubectl get nodes
 
 ### 4.1 Install Trivy CLI
 
-```bash
-sudo apt-get install -y wget apt-transport-https gnupg lsb-release
-wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
-echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
-sudo apt-get update
-sudo apt-get install -y trivy
+> **Version constraint**: the current implementation still shells out to the `trivy client`
+> subcommand, which upstream removed in Trivy `v0.29.0`. Install **`v0.28.x` or earlier** for
+> both client and server until the migration to `trivy image --server` (Task 4) lands — see
+> `docs/spec.md` §2.2. The apt repository below serves the *latest* release, so pin explicitly.
 
-# Verify Trivy installation
+```bash
+# Install a pinned v0.28.x release from the GitHub release tarball
+TRIVY_VERSION=0.28.1
+wget "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+tar -xzf "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" trivy
+sudo install -o root -g root -m 0755 trivy /usr/local/bin/trivy
+rm trivy "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+
+# Verify Trivy installation (expect v0.28.x)
 trivy --version
 ```
 
@@ -228,6 +234,6 @@ go test -v ./...
 Run linter (optional, install `golangci-lint`):
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.60.3
+curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.6.2
 golangci-lint run
 ```
