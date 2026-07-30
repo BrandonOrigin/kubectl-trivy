@@ -1,4 +1,4 @@
-module github.com/brandontsai/kubectl-trivy
+module github.com/BrandonOrigin/kubectl-trivy
 
 go 1.26.0
 
