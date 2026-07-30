@@ -6,12 +6,19 @@ This guide provides step-by-step instructions to set up a full development envir
 
 ## Prerequisites Summary
 
-To develop and test `kubectl-trivy`, your Ubuntu server will need:
-- **Go** (v1.26 or newer — matches the `go` directive in `go.mod`)
-- **kubectl** (Kubernetes CLI)
-- **Kind** (Kubernetes in Docker) or **Minikube** for local cluster testing
-- **Trivy CLI** (running in server mode) — **v0.29.0+**, reference version v0.72.0; see Step 4.1
-- **Git** & basic build tools
+Versions below match the compatibility table in the [README](../README.md#version-compatibility),
+which is the single source of truth — update it there first if any of these change.
+
+| Component | Version used in this guide | Step |
+|---|---|---|
+| Go | 1.26.5 (minimum 1.26) | Step 2 |
+| kind | v0.32.0 | Step 3.3 |
+| Kubernetes (test cluster) | 1.36 (minimum 1.35) | Step 3.3 |
+| Trivy CLI + server | v0.72.0 (minimum v0.29.0) | Step 4 |
+| golangci-lint | v2.12.2 | Step 7 |
+
+`kubectl` tracks the cluster and is installed at whatever `stable.txt` currently points to
+(Step 3.2). Git and basic build tools come from Step 1.
 
 ---
 
@@ -100,16 +107,26 @@ kubectl version --client
 
 ```bash
 # Download kind binary
-[ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.24.0/kind-linux-amd64
+[ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.32.0/kind-linux-amd64
 chmod +x ./kind
 sudo mv ./kind /usr/local/bin/kind
 
 # Create a local Kubernetes cluster
 kind create cluster --name dev-cluster
 
-# Verify cluster connection
+# Verify cluster connection — expect a 1.35.x or newer node
 kubectl get nodes
 ```
+
+> **Cluster version**: `kubectl-trivy` is built against `client-go` v0.36.3, so the cluster should be
+> Kubernetes **1.35–1.37** (see the README compatibility table). `kind create cluster` uses whichever
+> node image its release ships by default; if that falls outside the supported range, pin it
+> explicitly with the matching tag from the [kind v0.32.0 release
+> notes](https://github.com/kubernetes-sigs/kind/releases/tag/v0.32.0), for example:
+>
+> ```bash
+> kind create cluster --name dev-cluster --image kindest/node:v1.36.0
+> ```
 
 ---
 
@@ -118,7 +135,8 @@ kubectl get nodes
 ### 4.1 Install Trivy CLI
 
 > **Version requirement**: Trivy **`v0.29.0` or newer** (that release introduced
-> `trivy image --server`). The reference version is **`v0.72.0`** — see `docs/spec.md` §2.2.
+> `trivy image --server`). The reference version is **`v0.72.0`** — see the
+> [README compatibility table](../README.md#version-compatibility) and `docs/spec.md` §2.2.
 > Run the same release for both client and server.
 
 ```bash
@@ -200,7 +218,7 @@ kubectl get pods -n test-scan
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/brandontsai/kubectl-trivy.git
+   git clone https://github.com/BrandonOrigin/kubectl-trivy.git
    cd kubectl-trivy
    ```
 
@@ -242,6 +260,6 @@ go test -v ./...
 Run linter (optional, install `golangci-lint`):
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.6.2
+curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.12.2
 golangci-lint run
 ```

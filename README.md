@@ -15,13 +15,31 @@
 
 ---
 
+## Version Compatibility
+
+These are the versions this project is built and tested against. Everything in this README, in
+`docs/spec.md` and in `docs/develop_environment_setup.md` refers back to this table.
+
+| Component | Minimum | Reference version | Where it is pinned |
+|---|---|---|---|
+| Go | 1.26 | 1.26.5 | `go` directive in `go.mod`; `actions/setup-go` in `.github/workflows/release.yml` |
+| Trivy (client **and** server) | v0.29.0 | v0.72.0 | `docs/spec.md` §2.2 |
+| Kubernetes | 1.35 | 1.36 | `k8s.io/client-go` v0.36.3 in `go.mod` |
+
+- **Trivy `v0.29.0`** is the floor because that release replaced the `trivy client` subcommand with
+  `trivy image --server`, which is what the plugin invokes. Run the *same* Trivy release on the
+  client and the server — Trivy does not guarantee RPC compatibility across mismatched versions.
+- **Kubernetes** support follows the `client-go` skew policy: a client built against v0.36.x works
+  with API servers one minor version either side, so 1.35–1.37.
+
+---
+
 ## Prerequisites
 
 To use this tool, ensure the following are installed and configured:
 
 1. **Kubernetes Config**: A working `kubeconfig` file (typically `~/.kube/config`) with permissions to list pods in the target namespaces.
-2. **Trivy CLI**: The `trivy` command-line utility must be installed and executable on your host system path, as the plugin invokes it directly to run each scan.
-   - **Version compatibility**: requires **Trivy `v0.29.0` or newer**, which is when remote scanning moved to `trivy image --server`. The latest stable release (`v0.72.0`) is recommended and is what this plugin is tested against. See `docs/spec.md` §2.2.
+2. **Trivy CLI**: The `trivy` command-line utility must be installed and executable on your host system path, as the plugin invokes it directly to run each scan. See the version table above.
 3. **Remote Trivy Server**: A running instance of Trivy in server mode (e.g., `trivy server --listen 0.0.0.0:8080`), running the same Trivy release as the client.
 
 ---
@@ -29,8 +47,8 @@ To use this tool, ensure the following are installed and configured:
 ## Installation
 
 ### 1. Compile the Binary
-Clone the repository and compile the source code using **Go 1.26 or newer** (the version pinned by
-the `go` directive in `go.mod`):
+Clone the repository and compile the source code using **Go 1.26 or newer** (see the version table
+above):
 
 ```bash
 go build -o kubectl-trivy
