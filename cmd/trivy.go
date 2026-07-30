@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -71,14 +72,59 @@ func getImages(ctx context.Context, namespace string) (map[string]string, error)
 		return nil, fmt.Errorf("listing pods in namespace %s: %w", namespace, err)
 	}
 
-	images := map[string]string{}
 	fmt.Printf("Found %d pods in namespace %s\n", len(pods.Items), namespace)
-	for _, pod := range pods.Items {
+	return imagesFromPods(pods.Items), nil
+}
+
+// imagesFromPods maps each unique container image to the comma-separated list of
+// pods running it.
+//
+// All three container lists on the pod spec are inspected. Init containers matter
+// because they run with the same volumes and service account as the main
+// containers, and ephemeral containers because `kubectl debug` injects images that
+// never went through review. Sidecar-style init containers (`restartPolicy: Always`)
+// need no special handling: they appear in InitContainers like any other, and their
+// image is worth scanning for the same reason.
+func imagesFromPods(pods []corev1.Pod) map[string]string {
+	// Pod names are collected as a set, so a pod running one image across several
+	// of its containers is still listed once.
+	podsByImage := map[string]map[string]struct{}{}
+	record := func(image, podName string) {
+		if image == "" {
+			return
+		}
+		if podsByImage[image] == nil {
+			podsByImage[image] = map[string]struct{}{}
+		}
+		podsByImage[image][podName] = struct{}{}
+	}
+
+	for _, pod := range pods {
 		for _, container := range pod.Spec.Containers {
-			images[container.Image] = pod.Name + "," + images[container.Image]
+			record(container.Image, pod.Name)
+		}
+		for _, container := range pod.Spec.InitContainers {
+			record(container.Image, pod.Name)
+		}
+		// EphemeralContainer reaches Image through an embedded
+		// EphemeralContainerCommon, so it cannot share a loop with the others.
+		for _, container := range pod.Spec.EphemeralContainers {
+			record(container.Image, pod.Name)
 		}
 	}
-	return images, nil
+
+	images := make(map[string]string, len(podsByImage))
+	for image, podSet := range podsByImage {
+		names := make([]string, 0, len(podSet))
+		for name := range podSet {
+			names = append(names, name)
+		}
+		// Sorted so the Pods column is stable across runs; Go randomizes map
+		// iteration order.
+		sort.Strings(names)
+		images[image] = strings.Join(names, ",")
+	}
+	return images
 }
 
 // trivyServerURL normalizes the --server value into a URL Trivy accepts, so that
