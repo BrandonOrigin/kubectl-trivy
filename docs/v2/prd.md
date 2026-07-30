@@ -66,6 +66,9 @@ FDEs are asked constantly and rarely have a real number for.
 - Auto-remediation (opening PRs, patching images, restarting workloads). Analysis only.
 - Persisting scan history / trend tracking across runs (no database — matches the existing
   tool's non-goals in `docs/spec.md`).
+- A "submit now, check later" async mode. `analyze` is one synchronous, blocking CLI
+  invocation from scan through triage results (see §5.4) — no batch handle is persisted
+  for a later, separate invocation to pick up.
 - Replacing Trivy's scan engine or vulnerability database. This layer only triages Trivy's
   existing output.
 - A hosted/multi-tenant service. This is a CLI plugin, same as v1.
@@ -226,6 +229,26 @@ Poll `processing_status` until `"ended"`; stream results via `messages.batches.r
 keyed by `custom_id` — batch results are not ordered. Batch pricing is ~50% off standard
 rates — a second multiplier on top of caching, both shown in the cost table (§6.4).
 
+**Execution model: synchronous and in-memory, no local persistence.** `kubectl trivy
+analyze` is a single blocking CLI invocation, start to finish: it scans, submits the batch,
+polls `processing_status` in a loop until `"ended"`, assembles results, and prints them —
+all within one process, one run. The raw per-image Trivy JSON, and the image/pod ↔
+`custom_id` mapping needed to reassemble batch results, live only in memory for the
+duration of that run and are discarded when the process exits. Nothing is written to disk
+or a local store between the scan step and the printed output; this is what keeps the
+"no database" Non-Goal (§4) true even though §5.4 introduces an inherently asynchronous
+API in the middle of the pipeline.
+
+This means the command blocks for however long the batch takes to process — the Batch API
+gives no fixed turnaround guarantee, so a large sweep could mean a multi-minute (or longer)
+wait with nothing printed until polling resolves. §6.1's sample output should show a
+progress line during this wait (`Submitting batch (1,847 findings)... polling...`) rather
+than implying the results table appears instantly after `Scanning... done`. If real-world
+batch latency turns out to make this UX untenable, an async "submit now, check later" mode
+is the natural follow-up — but that's new scope (a batch-ID-to-something mapping needs to
+persist somewhere, which reopens the no-database Non-Goal), not something to build
+speculatively now.
+
 ### 5.5 Streaming
 
 Reserved for the interactive path (`kubectl trivy analyze --detail <image>` /
@@ -248,6 +271,7 @@ $ kubectl trivy analyze -n production
 Found 12 pods in namespace production (8 unique images)
 Remote Trivy Server: trivy.internal:8080
 Scanning... done (8 images, 1,847 total findings)
+Submitting batch (1,847 findings)... polling... done in 4m12s
 Triage: Haiku 4.5 (1,847 findings) → Opus 5 escalation (23 findings)
 
 ┌──────────────────────┬─────────────┬──────────┬────────────────────────────────────────┐
